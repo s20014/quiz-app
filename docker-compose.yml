@@ -1,0 +1,73 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quiz_app
+    tty: true
+    ports:
+      - '80:80'
+      - '5173:5173'
+    working_dir: /var/www
+    volumes:
+      - '.:/var/www'
+    depends_on:
+      - db
+      - redis
+    networks:
+      - quiz_app_network
+
+  db:
+    image: mysql:8.0
+    container_name: quiz_db
+    ports:
+      - '3307:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      MYSQL_DATABASE: quiz_app
+    volumes:
+      - quiz_db_data:/var/lib/mysql
+      - ./docker/mysql/initdb.d:/docker-entrypoint-initdb.d
+    networks:
+      - quiz_app_network
+
+  redis:
+    image: redis:alpine
+    container_name: quiz_redis
+    ports:
+      - '6380:6379'
+    networks:
+      - quiz_app_network
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: quiz_phpmyadmin
+    links:
+      - db
+    ports:
+      - '8081:80'
+    environment:
+      - PMA_HOSTS=db
+      - PMA_USER=root
+      - PMA_PASSWORD=rootpassword
+    depends_on:
+      - db
+    networks:
+      - quiz_app_network
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: quiz_mailhog
+    ports:
+      - '8026:8025'
+      - '1026:1025'
+    networks:
+      - quiz_app_network
+
+volumes:
+  quiz_db_data:
+
+networks:
+  quiz_app_network:
