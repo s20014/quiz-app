@@ -23,6 +23,8 @@ Route::get('/play/{roomId}/answer', function ($roomId) {
     ]);
 });
 
-Route::get('/leaderboard', function () {
-    return Inertia::render('Leaderboard');
+Route::get('/leaderboard/{roomId}', function ($roomId) {
+    return Inertia::render('Leaderboard', [
+        'roomId' => $roomId
+    ]);
 });

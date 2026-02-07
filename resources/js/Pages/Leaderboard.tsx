@@ -142,9 +142,9 @@ export default function Leaderboard({ roomId }: Props) {
 
         {/* 戻るボタン */}
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2">
-          <Link href="/">
+          <Link href={roomId ? `/play/${roomId}/answer` : '/'}>
             <Button size="lg" variant="outline" className="shadow-lg">
-              ホームに戻る
+              解答画面に戻る
             </Button>
           </Link>
         </div>

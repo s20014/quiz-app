@@ -62,4 +62,76 @@ class PlayerController extends Controller
             }),
         ]);
     }
+
+    /**
+     * Get a specific player by ID
+     */
+    public function show($playerId)
+    {
+        $player = Player::findOrFail($playerId);
+
+        return response()->json([
+            'success' => true,
+            'player' => [
+                'id' => $player->id,
+                'room_id' => $player->room_id,
+                'name' => $player->name,
+                'score' => $player->score,
+                'current_answer' => $player->current_answer,
+                'joined_at' => $player->joined_at,
+            ],
+        ]);
+    }
+
+    /**
+     * Submit an answer for a player
+     */
+    public function submitAnswer(Request $request, $playerId)
+    {
+        $request->validate([
+            'answer' => 'required',
+        ]);
+
+        $player = Player::findOrFail($playerId);
+
+        $player->current_answer = is_bool($request->answer)
+            ? ($request->answer ? 'true' : 'false')
+            : $request->answer;
+        $player->save();
+
+        // Broadcast answer to room
+        event(new \App\Events\PlayerAnsweredEvent($player, $request->answer));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Answer submitted successfully',
+        ]);
+    }
+
+    /**
+     * Update player score
+     */
+    public function updateScore(Request $request, $playerId)
+    {
+        $request->validate([
+            'score' => 'required|integer|min:0',
+        ]);
+
+        $player = Player::findOrFail($playerId);
+        $oldScore = $player->score;
+        $player->score = $request->score;
+        $player->save();
+
+        // Broadcast score update to room
+        event(new \App\Events\ScoreUpdatedEvent($player, $oldScore));
+
+        return response()->json([
+            'success' => true,
+            'player' => [
+                'id' => $player->id,
+                'name' => $player->name,
+                'score' => $player->score,
+            ],
+        ]);
+    }
 }

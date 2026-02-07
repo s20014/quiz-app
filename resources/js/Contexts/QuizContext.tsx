@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { roomApi, playerApi } from '@/services/api';
+import { roomApi, playerApi, questionApi } from '@/services/api';
 
 export type QuestionType = 'true-false' | 'multiple-choice' | 'text-input';
 
@@ -23,14 +23,16 @@ interface QuizContextType {
   currentQuestion: Question | null;
   isAcceptingAnswers: boolean;
   createRoom: () => Promise<void>;
-  addPlayer: (name: string) => Promise<string>;
-  setCurrentQuestion: (question: Question) => void;
+  joinRoom: (roomCodeParam: string) => Promise<void>;
+  addPlayer: (name: string, roomCodeParam?: string) => Promise<string>;
+  setCurrentQuestion: (question: Question) => Promise<void>;
   startAcceptingAnswers: () => void;
   stopAcceptingAnswers: () => void;
-  submitAnswer: (playerId: string, answer: string | boolean) => void;
+  submitAnswer: (playerId: string, answer: string | boolean) => Promise<void>;
+  gradeQuestion: () => Promise<void>;
   calculateScores: () => void;
   resetQuestion: () => void;
-  updatePlayerScore: (playerId: string, newScore: number) => void;
+  updatePlayerScore: (playerId: string, newScore: number) => Promise<void>;
 }
 
 const QuizContext = createContext<QuizContextType | undefined>(undefined);
@@ -39,15 +41,16 @@ export function QuizProvider({ children }: { children: ReactNode }) {
   const [roomId, setRoomId] = useState<string | null>(null);
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
-  const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
+  const [currentQuestion, setCurrentQuestionInternal] = useState<Question | null>(null);
   const [isAcceptingAnswers, setIsAcceptingAnswers] = useState(false);
 
-  // Listen for PlayerJoinedEvent when room is created
+  // Listen for events when room is created
   useEffect(() => {
     if (!roomId || !window.Echo) return;
 
     const channel = window.Echo.channel(`room.${roomId}`);
 
+    // Listen for player joined
     channel.listen('PlayerJoinedEvent', (event: { player: Player }) => {
       setPlayers(prev => {
         // Check if player already exists
@@ -56,6 +59,57 @@ export function QuizProvider({ children }: { children: ReactNode }) {
 
         return [...prev, event.player];
       });
+    });
+
+    // Listen for question asked
+    channel.listen('QuestionAskedEvent', (event: { question: Question }) => {
+      setCurrentQuestionInternal(event.question);
+      setIsAcceptingAnswers(true);
+      // Reset player answers for the new question
+      setPlayers(prev =>
+        prev.map(p => ({
+          ...p,
+          answer: undefined,
+          isCorrect: undefined,
+        }))
+      );
+    });
+
+    // Listen for player answered
+    channel.listen('PlayerAnsweredEvent', (event: { player_id: string | number; answer: string | boolean }) => {
+      setPlayers(prev =>
+        prev.map(p =>
+          p.id.toString() === event.player_id.toString() ? { ...p, answer: event.answer } : p
+        )
+      );
+    });
+
+    // Listen for question graded
+    channel.listen('QuestionGradedEvent', (event: { results: Array<{ player_id: number; player_name: string; answer: string; is_correct: boolean; new_score: number }> }) => {
+      setPlayers(prev =>
+        prev.map(p => {
+          const result = event.results.find(r => r.player_id.toString() === p.id.toString());
+          if (result) {
+            return {
+              ...p,
+              answer: result.answer,
+              isCorrect: result.is_correct,
+              score: result.new_score,
+            };
+          }
+          return p;
+        })
+      );
+      setIsAcceptingAnswers(false);
+    });
+
+    // Listen for score updated
+    channel.listen('ScoreUpdatedEvent', (event: { playerId: number; playerName: string; oldScore: number; newScore: number }) => {
+      setPlayers(prev =>
+        prev.map(p =>
+          p.id.toString() === event.playerId.toString() ? { ...p, score: event.newScore } : p
+        )
+      );
     });
 
     return () => {
@@ -74,16 +128,43 @@ export function QuizProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const addPlayer = async (name: string) => {
-    if (!roomCode) {
+  const joinRoom = async (roomCodeParam: string) => {
+    try {
+      const { room } = await roomApi.getRoom(roomCodeParam);
+      setRoomId(room.id.toString());
+      setRoomCode(room.room_code);
+    } catch (error) {
+      console.error('Failed to join room:', error);
+      throw error;
+    }
+  };
+
+  const addPlayer = async (name: string, roomCodeParam?: string) => {
+    const codeToUse = roomCodeParam || roomCode;
+
+    if (!codeToUse) {
       throw new Error('Room not created yet');
     }
 
     try {
-      const { player } = await playerApi.joinRoom(roomCode, name);
+      const { player } = await playerApi.joinRoom(codeToUse, name);
       return player.id.toString();
     } catch (error) {
       console.error('Failed to join room:', error);
+      throw error;
+    }
+  };
+
+  const setCurrentQuestion = async (question: Question) => {
+    if (!roomId) {
+      throw new Error('Room not created yet');
+    }
+
+    try {
+      await questionApi.startQuestion(roomId, question);
+      // The event listener will update the local state
+    } catch (error) {
+      console.error('Failed to start question:', error);
       throw error;
     }
   };
@@ -96,12 +177,28 @@ export function QuizProvider({ children }: { children: ReactNode }) {
     setIsAcceptingAnswers(false);
   };
 
-  const submitAnswer = (playerId: string, answer: string | boolean) => {
-    setPlayers(prev =>
-      prev.map(p =>
-        p.id === playerId ? { ...p, answer } : p
-      )
-    );
+  const submitAnswer = async (playerId: string, answer: string | boolean) => {
+    try {
+      await playerApi.submitAnswer(playerId, answer);
+      // The event listener will update the local state
+    } catch (error) {
+      console.error('Failed to submit answer:', error);
+      throw error;
+    }
+  };
+
+  const gradeQuestion = async () => {
+    if (!roomId) {
+      throw new Error('Room not created yet');
+    }
+
+    try {
+      await questionApi.gradeQuestion(roomId);
+      // The event listener will update the scores
+    } catch (error) {
+      console.error('Failed to grade question:', error);
+      throw error;
+    }
   };
 
   const calculateScores = () => {
@@ -129,16 +226,18 @@ export function QuizProvider({ children }: { children: ReactNode }) {
         isCorrect: undefined,
       }))
     );
-    setCurrentQuestion(null);
+    setCurrentQuestionInternal(null);
     setIsAcceptingAnswers(false);
   };
 
-  const updatePlayerScore = (playerId: string, newScore: number) => {
-    setPlayers(prev =>
-      prev.map(p =>
-        p.id === playerId ? { ...p, score: newScore } : p
-      )
-    );
+  const updatePlayerScore = async (playerId: string, newScore: number) => {
+    try {
+      await playerApi.updateScore(playerId, newScore);
+      // The event listener will update the local state
+    } catch (error) {
+      console.error('Failed to update score:', error);
+      throw error;
+    }
   };
 
   return (
@@ -147,14 +246,16 @@ export function QuizProvider({ children }: { children: ReactNode }) {
         roomId,
         roomCode,
         players,
-        currentQuestion,
+        currentQuestion: currentQuestion,
         isAcceptingAnswers,
         createRoom,
+        joinRoom,
         addPlayer,
         setCurrentQuestion,
         startAcceptingAnswers,
         stopAcceptingAnswers,
         submitAnswer,
+        gradeQuestion,
         calculateScores,
         resetQuestion,
         updatePlayerScore,

@@ -19,7 +19,7 @@ export default function PlayerJoin({ roomId }: Props) {
     e.preventDefault();
     if (name.trim()) {
       try {
-        const playerId = await addPlayer(name.trim());
+        const playerId = await addPlayer(name.trim(), roomId);
         // プレイヤーIDをセッションストレージに保存
         sessionStorage.setItem('playerId', playerId);
         router.visit(`/play/${roomId}/answer`);

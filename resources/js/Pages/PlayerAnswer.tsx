@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
 import { useQuiz } from '@/Contexts/QuizContext';
+import { playerApi } from '@/services/api';
+import type { Player } from '@/Contexts/QuizContext';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/Components/ui/card';
@@ -12,27 +14,75 @@ interface Props {
 }
 
 export default function PlayerAnswer({ roomId }: Props) {
-  const { players, currentQuestion, isAcceptingAnswers, submitAnswer } = useQuiz();
+  const { players, currentQuestion, isAcceptingAnswers, submitAnswer, joinRoom } = useQuiz();
   const [playerId, setPlayerId] = useState<string | null>(null);
+  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedAnswer, setSelectedAnswer] = useState<string>('');
   const [hasSubmitted, setHasSubmitted] = useState(false);
 
+  // Join room channel to receive events
   useEffect(() => {
-    const storedPlayerId = sessionStorage.getItem('playerId');
-    setPlayerId(storedPlayerId);
+    joinRoom(roomId);
+  }, [roomId, joinRoom]);
+
+  // Fetch player data from API
+  useEffect(() => {
+    const fetchPlayer = async () => {
+      const storedPlayerId = sessionStorage.getItem('playerId');
+      if (!storedPlayerId) {
+        setIsLoading(false);
+        return;
+      }
+
+      setPlayerId(storedPlayerId);
+
+      try {
+        const { player } = await playerApi.getPlayer(storedPlayerId);
+        setCurrentPlayer({
+          id: player.id,
+          name: player.name,
+          score: player.score,
+          answer: player.current_answer,
+        });
+        // If player has already answered, set hasSubmitted to true
+        if (player.current_answer) {
+          setHasSubmitted(true);
+        }
+      } catch (error) {
+        console.error('Failed to fetch player:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPlayer();
   }, []);
 
-  const currentPlayer = players.find(p => p.id === playerId);
+  // Update player from WebSocket when available
+  useEffect(() => {
+    if (playerId && players.length > 0) {
+      const updatedPlayer = players.find(p => p.id.toString() === playerId);
+      if (updatedPlayer) {
+        setCurrentPlayer(updatedPlayer);
+      }
+    }
+  }, [players, playerId]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!playerId || !selectedAnswer) return;
-    
+
     const answer = currentQuestion?.type === 'true-false'
       ? selectedAnswer === 'true'
       : selectedAnswer;
-    
-    submitAnswer(playerId, answer);
-    setHasSubmitted(true);
+
+    try {
+      await submitAnswer(playerId, answer);
+      setHasSubmitted(true);
+    } catch (error) {
+      console.error('Failed to submit answer:', error);
+      alert('回答の送信に失敗しました');
+    }
   };
 
   // 新しい問題が始まったらリセット
@@ -81,7 +131,7 @@ export default function PlayerAnswer({ roomId }: Props) {
         </Card>
 
         {/* 回答画面 */}
-        {!currentQuestion || !isAcceptingAnswers ? (
+        {!currentQuestion ? (
           <Card>
             <CardContent className="py-12 text-center">
               <Clock className="w-16 h-16 mx-auto mb-4 text-gray-400" />
@@ -98,24 +148,26 @@ export default function PlayerAnswer({ roomId }: Props) {
               <p className="text-xl font-semibold mb-2">回答を送信しました！</p>
               <p className="text-gray-500">結果発表をお待ちください</p>
               {currentPlayer.isCorrect !== undefined && (
-                <div className="mt-6">
-                  <Badge
-                    variant={currentPlayer.isCorrect ? 'default' : 'secondary'}
-                    className="text-lg px-6 py-2"
-                  >
-                    {currentPlayer.isCorrect ? (
-                      <>
-                        <Check className="w-5 h-5 mr-2" />
-                        正解！ +100点
-                      </>
-                    ) : (
-                      <>
-                        <X className="w-5 h-5 mr-2" />
-                        残念...
-                      </>
-                    )}
-                  </Badge>
-                </div>
+                <>
+                  <div className="mt-6">
+                    <Badge
+                      variant={currentPlayer.isCorrect ? 'default' : 'secondary'}
+                      className="text-lg px-6 py-2"
+                    >
+                      {currentPlayer.isCorrect ? (
+                        <>
+                          <Check className="w-5 h-5 mr-2" />
+                          正解！ +100点
+                        </>
+                      ) : (
+                        <>
+                          <X className="w-5 h-5 mr-2" />
+                          残念...
+                        </>
+                      )}
+                    </Badge>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -136,6 +188,7 @@ export default function PlayerAnswer({ roomId }: Props) {
                     size="lg"
                     variant={selectedAnswer === 'true' ? 'default' : 'outline'}
                     onClick={() => setSelectedAnswer('true')}
+                    disabled={!isAcceptingAnswers}
                     className="h-24 text-lg"
                   >
                     <Check className="w-6 h-6 mr-2" />
@@ -145,6 +198,7 @@ export default function PlayerAnswer({ roomId }: Props) {
                     size="lg"
                     variant={selectedAnswer === 'false' ? 'default' : 'outline'}
                     onClick={() => setSelectedAnswer('false')}
+                    disabled={!isAcceptingAnswers}
                     className="h-24 text-lg"
                   >
                     <X className="w-6 h-6 mr-2" />
@@ -161,6 +215,7 @@ export default function PlayerAnswer({ roomId }: Props) {
                       size="lg"
                       variant={selectedAnswer === option ? 'default' : 'outline'}
                       onClick={() => setSelectedAnswer(option)}
+                      disabled={!isAcceptingAnswers}
                       className="h-24 text-xl font-bold"
                     >
                       {option}
@@ -176,6 +231,7 @@ export default function PlayerAnswer({ roomId }: Props) {
                     placeholder="回答を入力してください"
                     value={selectedAnswer}
                     onChange={(e) => setSelectedAnswer(e.target.value)}
+                    disabled={!isAcceptingAnswers}
                     className="text-lg h-14"
                     autoFocus
                   />
@@ -184,7 +240,7 @@ export default function PlayerAnswer({ roomId }: Props) {
 
               <Button
                 onClick={handleSubmit}
-                disabled={!selectedAnswer}
+                disabled={!isAcceptingAnswers || !selectedAnswer}
                 className="w-full"
                 size="lg"
               >
@@ -200,7 +256,7 @@ export default function PlayerAnswer({ roomId }: Props) {
 
         {/* リーダーボードボタン */}
         <div className="mt-6 text-center">
-          <Link href={`/leaderboard`}>
+          <Link href={`/leaderboard/${roomId}`}>
             <Button variant="outline" size="lg" className="gap-2">
               <Trophy className="w-5 h-5 text-yellow-500" />
               リーダーボードを見る

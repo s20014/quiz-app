@@ -23,6 +23,7 @@ import {
 import QRCode from "react-qr-code";
 import {
     Check,
+    Circle,
     X,
     Users,
     Play,
@@ -47,7 +48,7 @@ export default function Host() {
         setCurrentQuestion,
         startAcceptingAnswers,
         stopAcceptingAnswers,
-        calculateScores,
+        gradeQuestion,
         resetQuestion,
         updatePlayerScore,
     } = useQuiz();
@@ -67,6 +68,7 @@ export default function Host() {
     } | null>(null);
     const [newScore, setNewScore] = useState<string>("");
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [canSetAnswer, setCanSetAnswer] = useState(true); // 初期状態は設定可能
 
     const playerUrl = roomCode ? `${window.location.origin}/play/${roomCode}` : '';
 
@@ -79,16 +81,23 @@ export default function Host() {
                     : correctAnswer,
         });
         startAcceptingAnswers();
+        setCanSetAnswer(false); // 問題開始後は正解設定を無効にする
     };
 
-    const handleStopAndCalculate = () => {
-        stopAcceptingAnswers();
-        calculateScores();
+    const handleStopAndCalculate = async () => {
+        try {
+            await gradeQuestion();
+            // stopAcceptingAnswers is automatically called by gradeQuestion
+        } catch (error) {
+            console.error('Failed to grade question:', error);
+            alert('採点に失敗しました');
+        }
     };
 
     const handleReset = () => {
         resetQuestion();
         setCorrectAnswer("");
+        setCanSetAnswer(true); // リセット後は正解設定を有効にする
     };
 
     const handleOpenEditScore = (player: {
@@ -101,14 +110,19 @@ export default function Host() {
         setIsDialogOpen(true);
     };
 
-    const handleSaveScore = () => {
+    const handleSaveScore = async () => {
         if (editingPlayer) {
             const scoreValue = parseInt(newScore, 10);
             if (!isNaN(scoreValue) && scoreValue >= 0) {
-                updatePlayerScore(editingPlayer.id, scoreValue);
-                setIsDialogOpen(false);
-                setEditingPlayer(null);
-                setNewScore("");
+                try {
+                    await updatePlayerScore(editingPlayer.id.toString(), scoreValue);
+                    setIsDialogOpen(false);
+                    setEditingPlayer(null);
+                    setNewScore("");
+                } catch (error) {
+                    console.error('Failed to update score:', error);
+                    alert('スコアの更新に失敗しました');
+                }
             }
         }
     };
@@ -178,22 +192,32 @@ export default function Host() {
                                                 className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                                             >
                                                 <div>
-                                                    <p>{player.name}</p>
+                                                    <p className="font-medium">{player.name}</p>
                                                     {currentQuestion &&
                                                         player.answer !==
                                                             undefined && (
-                                                            <Badge
-                                                                variant={
-                                                                    player.isCorrect
-                                                                        ? "default"
-                                                                        : "secondary"
-                                                                }
-                                                                className="mt-1"
-                                                            >
-                                                                {player.isCorrect
-                                                                    ? "正解"
-                                                                    : "回答済み"}
-                                                            </Badge>
+                                                            <div className="flex gap-2 mt-1 flex-wrap">
+                                                                <Badge
+                                                                    variant={
+                                                                        player.isCorrect
+                                                                            ? "default"
+                                                                            : "secondary"
+                                                                    }
+                                                                >
+                                                                    {player.isCorrect
+                                                                        ? "正解"
+                                                                        : "不正解"}
+                                                                </Badge>
+                                                                {player.isCorrect !== undefined && (
+                                                                    <Badge variant="outline">
+                                                                        回答: {
+                                                                            typeof player.answer === 'boolean'
+                                                                                ? (player.answer ? 'マル' : 'バツ')
+                                                                                : (player.answer === 'true' ? 'マル' : player.answer === 'false' ? 'バツ' : player.answer)
+                                                                        }
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
                                                         )}
                                                 </div>
                                                 <div className="text-right">
@@ -256,14 +280,14 @@ export default function Host() {
                                                         setCorrectAnswer("");
                                                     }}
                                                     disabled={
-                                                        isAcceptingAnswers
+                                                        !canSetAnswer || isAcceptingAnswers
                                                     }
                                                     className={`p-6 rounded-lg border-2 transition-all hover:scale-105 ${
                                                         selectedType ===
                                                         "true-false"
                                                             ? "border-indigo-500 bg-indigo-50 shadow-md"
                                                             : "border-gray-200 bg-white hover:border-gray-300"
-                                                    } ${isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                                                    } ${!canSetAnswer || isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                                                 >
                                                     <CircleDot
                                                         className={`w-10 h-10 mx-auto mb-3 ${
@@ -297,14 +321,14 @@ export default function Host() {
                                                         setCorrectAnswer("");
                                                     }}
                                                     disabled={
-                                                        isAcceptingAnswers
+                                                        !canSetAnswer || isAcceptingAnswers
                                                     }
                                                     className={`p-6 rounded-lg border-2 transition-all hover:scale-105 ${
                                                         selectedType ===
                                                         "multiple-choice"
                                                             ? "border-indigo-500 bg-indigo-50 shadow-md"
                                                             : "border-gray-200 bg-white hover:border-gray-300"
-                                                    } ${isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                                                    } ${!canSetAnswer || isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                                                 >
                                                     <ListOrdered
                                                         className={`w-10 h-10 mx-auto mb-3 ${
@@ -338,14 +362,14 @@ export default function Host() {
                                                         setCorrectAnswer("");
                                                     }}
                                                     disabled={
-                                                        isAcceptingAnswers
+                                                        !canSetAnswer || isAcceptingAnswers
                                                     }
                                                     className={`p-6 rounded-lg border-2 transition-all hover:scale-105 ${
                                                         selectedType ===
                                                         "text-input"
                                                             ? "border-indigo-500 bg-indigo-50 shadow-md"
                                                             : "border-gray-200 bg-white hover:border-gray-300"
-                                                    } ${isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                                                    } ${!canSetAnswer || isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                                                 >
                                                     <Type
                                                         className={`w-10 h-10 mx-auto mb-3 ${
@@ -386,36 +410,23 @@ export default function Host() {
                                                             )
                                                         }
                                                         disabled={
-                                                            isAcceptingAnswers
+                                                            !canSetAnswer || isAcceptingAnswers
                                                         }
                                                         className={`p-8 rounded-xl border-2 transition-all hover:scale-105 ${
                                                             correctAnswer ===
                                                             "true"
                                                                 ? "border-green-500 bg-green-50 shadow-lg"
                                                                 : "border-gray-200 bg-white hover:border-gray-300"
-                                                        } ${isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                                                        } ${!canSetAnswer || isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                                                     >
-                                                        <Check
-                                                            className={`w-16 h-16 mx-auto mb-2 ${
+                                                        <Circle
+                                                            className={`w-16 h-16 mx-auto ${
                                                                 correctAnswer ===
                                                                 "true"
                                                                     ? "text-green-600"
                                                                     : "text-gray-400"
                                                             }`}
                                                         />
-                                                        <p
-                                                            className={`text-xl font-bold ${
-                                                                correctAnswer ===
-                                                                "true"
-                                                                    ? "text-green-900"
-                                                                    : "text-gray-700"
-                                                            }`}
-                                                        >
-                                                            マル
-                                                        </p>
-                                                        <p className="text-sm text-gray-500 mt-1">
-                                                            正しい
-                                                        </p>
                                                     </button>
 
                                                     <button
@@ -426,36 +437,23 @@ export default function Host() {
                                                             )
                                                         }
                                                         disabled={
-                                                            isAcceptingAnswers
+                                                            !canSetAnswer || isAcceptingAnswers
                                                         }
                                                         className={`p-8 rounded-xl border-2 transition-all hover:scale-105 ${
                                                             correctAnswer ===
                                                             "false"
                                                                 ? "border-red-500 bg-red-50 shadow-lg"
                                                                 : "border-gray-200 bg-white hover:border-gray-300"
-                                                        } ${isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                                                        } ${!canSetAnswer || isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                                                     >
                                                         <X
-                                                            className={`w-16 h-16 mx-auto mb-2 ${
+                                                            className={`w-16 h-16 mx-auto ${
                                                                 correctAnswer ===
                                                                 "false"
                                                                     ? "text-red-600"
                                                                     : "text-gray-400"
                                                             }`}
                                                         />
-                                                        <p
-                                                            className={`text-xl font-bold ${
-                                                                correctAnswer ===
-                                                                "false"
-                                                                    ? "text-red-900"
-                                                                    : "text-gray-700"
-                                                            }`}
-                                                        >
-                                                            バツ
-                                                        </p>
-                                                        <p className="text-sm text-gray-500 mt-1">
-                                                            誤り
-                                                        </p>
                                                     </button>
                                                 </div>
                                             ) : selectedType ===
@@ -472,14 +470,14 @@ export default function Host() {
                                                                     )
                                                                 }
                                                                 disabled={
-                                                                    isAcceptingAnswers
+                                                                    !canSetAnswer || isAcceptingAnswers
                                                                 }
                                                                 className={`p-8 rounded-xl border-2 transition-all hover:scale-105 ${
                                                                     correctAnswer ===
                                                                     option
                                                                         ? "border-indigo-500 bg-indigo-50 shadow-lg"
                                                                         : "border-gray-200 bg-white hover:border-gray-300"
-                                                                } ${isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                                                                } ${!canSetAnswer || isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                                                             >
                                                                 <p
                                                                     className={`text-5xl font-bold ${
@@ -489,10 +487,6 @@ export default function Host() {
                                                                             : "text-gray-400"
                                                                     }`}
                                                                 >
-                                                                    {option}
-                                                                </p>
-                                                                <p className="text-sm text-gray-500 mt-2">
-                                                                    選択肢{" "}
                                                                     {option}
                                                                 </p>
                                                             </button>
@@ -511,7 +505,7 @@ export default function Host() {
                                                             )
                                                         }
                                                         disabled={
-                                                            isAcceptingAnswers
+                                                            !canSetAnswer || isAcceptingAnswers
                                                         }
                                                         className="text-lg h-14 border-0 focus-visible:ring-0 px-2"
                                                     />
