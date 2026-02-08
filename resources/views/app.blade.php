@@ -7,7 +7,9 @@
         <title inertia>{{ config('app.name', 'Laravel') }}</title>
 
         <!-- Scripts -->
-        @viteReactRefresh
+        @if(app()->environment('local'))
+            @viteReactRefresh
+        @endif
         @vite(['resources/css/app.css', 'resources/js/app.tsx'])
         @inertiaHead
     </head>
