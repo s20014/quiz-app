@@ -3,6 +3,7 @@ import React, {
     useContext,
     useState,
     useEffect,
+    useCallback,
     ReactNode,
 } from "react";
 import { roomApi, playerApi, questionApi } from "@/services/api";
@@ -169,16 +170,23 @@ export function QuizProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const joinRoom = async (roomCodeParam: string) => {
+    const joinRoom = useCallback(async (roomCodeParam: string) => {
         try {
             const { room } = await roomApi.getRoom(roomCodeParam);
             setRoomId(room.id.toString());
             setRoomCode(room.room_code);
+            // プレイヤー一覧を取得してContextに設定（QuestionGradedEvent受信のため）
+            const { players: roomPlayers } = await playerApi.getPlayers(room.id);
+            setPlayers(roomPlayers.map(p => ({
+                id: p.id,
+                name: p.name,
+                score: p.score,
+            })));
         } catch (error) {
             console.error("Failed to join room:", error);
             throw error;
         }
-    };
+    }, []);
 
     const addPlayer = async (name: string, roomCodeParam?: string) => {
         const codeToUse = roomCodeParam || roomCode;
