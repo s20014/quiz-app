@@ -8,11 +8,43 @@ services:
     ports:
       - '80:80'
       - '5173:5173'
+    working_dir: /var/www
+    volumes:
+      - '.:/var/www'
+    depends_on:
+      - db
+      - redis
+    networks:
+      - quiz_app_network
+
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quiz_queue
+    command: php artisan queue:work --tries=3
+    working_dir: /var/www
+    volumes:
+      - '.:/var/www'
+    depends_on:
+      - db
+      - redis
+    networks:
+      - quiz_app_network
+
+  reverb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quiz_reverb
+    command: php artisan reverb:start --host=0.0.0.0 --port=8080
+    ports:
       - '8080:8080'
     working_dir: /var/www
     volumes:
       - '.:/var/www'
     depends_on:
+      - app
       - db
       - redis
     networks:

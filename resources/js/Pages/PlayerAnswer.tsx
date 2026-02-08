@@ -43,7 +43,7 @@ export default function PlayerAnswer({ roomId }: Props) {
           id: player.id,
           name: player.name,
           score: player.score,
-          answer: player.current_answer,
+          answer: player.current_answer ?? undefined,
         });
         // If player has already answered, set hasSubmitted to true
         if (player.current_answer) {
