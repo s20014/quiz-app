@@ -1,12 +1,12 @@
-import React, {
+import {
     createContext,
     useContext,
     useState,
-    useEffect,
     useCallback,
     ReactNode,
 } from "react";
 import { roomApi, playerApi, questionApi } from "@/services/api";
+import { useEchoPublic } from "@laravel/echo-react";
 
 export type QuestionType = "true-false" | "multiple-choice" | "text-input";
 
@@ -52,14 +52,11 @@ export function QuizProvider({ children }: { children: ReactNode }) {
         useState<Question | null>(null);
     const [isAcceptingAnswers, setIsAcceptingAnswers] = useState(false);
 
-    // Listen for events when room is created
-    useEffect(() => {
-        if (!roomId || !window.Echo) return;
-
-        const channel = window.Echo.channel(`room.${roomId}`);
-
-        // Listen for player joined
-        channel.listen("PlayerJoinedEvent", (event: { player: Player }) => {
+    // Listen for player joined
+    useEchoPublic(
+        roomId ? `room.${roomId}` : "",
+        "PlayerJoinedEvent",
+        (event: { player: Player }) => {
             setPlayers((prev) => {
                 // Check if player already exists
                 const exists = prev.some((p) => p.id === event.player.id);
@@ -67,97 +64,94 @@ export function QuizProvider({ children }: { children: ReactNode }) {
 
                 return [...prev, event.player];
             });
-        });
+        },
+    );
 
-        // Listen for question asked
-        channel.listen(
-            "QuestionAskedEvent",
-            (event: { question: Question }) => {
-                setCurrentQuestionInternal(event.question);
-                setIsAcceptingAnswers(true);
-                // Reset player answers for the new question
-                setPlayers((prev) =>
-                    prev.map((p) => ({
-                        ...p,
-                        answer: undefined,
-                        isCorrect: undefined,
-                    })),
-                );
-            },
-        );
+    // Listen for question asked
+    useEchoPublic(
+        roomId ? `room.${roomId}` : "",
+        "QuestionAskedEvent",
+        (event: { question: Question }) => {
+            setCurrentQuestionInternal(event.question);
+            setIsAcceptingAnswers(true);
+            // Reset player answers for the new question
+            setPlayers((prev) =>
+                prev.map((p) => ({
+                    ...p,
+                    answer: undefined,
+                    isCorrect: undefined,
+                })),
+            );
+        },
+    );
 
-        // Listen for player answered
-        channel.listen(
-            "PlayerAnsweredEvent",
-            (event: {
-                player_id: string | number;
-                answer: string | boolean;
-            }) => {
-                setPlayers((prev) =>
-                    prev.map((p) =>
-                        p.id.toString() === event.player_id.toString()
-                            ? { ...p, answer: event.answer }
-                            : p,
-                    ),
-                );
-            },
-        );
+    // Listen for player answered
+    useEchoPublic(
+        roomId ? `room.${roomId}` : "",
+        "PlayerAnsweredEvent",
+        (event: { player_id: string | number; answer: string | boolean }) => {
+            setPlayers((prev) =>
+                prev.map((p) =>
+                    p.id.toString() === event.player_id.toString()
+                        ? { ...p, answer: event.answer }
+                        : p,
+                ),
+            );
+        },
+    );
 
-        // Listen for question graded
-        channel.listen(
-            "QuestionGradedEvent",
-            (event: {
-                results: Array<{
-                    player_id: number;
-                    player_name: string;
-                    answer: string;
-                    is_correct: boolean;
-                    new_score: number;
-                }>;
-            }) => {
-                setPlayers((prev) =>
-                    prev.map((p) => {
-                        const result = event.results.find(
-                            (r) => r.player_id.toString() === p.id.toString(),
-                        );
-                        if (result) {
-                            return {
-                                ...p,
-                                answer: result.answer,
-                                isCorrect: result.is_correct,
-                                score: result.new_score,
-                            };
-                        }
-                        return p;
-                    }),
-                );
-                setIsAcceptingAnswers(false);
-            },
-        );
+    // Listen for question graded
+    useEchoPublic(
+        roomId ? `room.${roomId}` : "",
+        "QuestionGradedEvent",
+        (event: {
+            results: Array<{
+                player_id: number;
+                player_name: string;
+                answer: string;
+                is_correct: boolean;
+                new_score: number;
+            }>;
+        }) => {
+            setPlayers((prev) =>
+                prev.map((p) => {
+                    const result = event.results.find(
+                        (r) => r.player_id.toString() === p.id.toString(),
+                    );
+                    if (result) {
+                        return {
+                            ...p,
+                            answer: result.answer,
+                            isCorrect: result.is_correct,
+                            score: result.new_score,
+                        };
+                    }
+                    return p;
+                }),
+            );
+            setIsAcceptingAnswers(false);
+        },
+    );
 
-        // Listen for score updated
-        channel.listen(
-            "ScoreUpdatedEvent",
-            (event: {
-                playerId: number;
-                playerName: string;
-                oldScore: number;
-                newScore: number;
-            }) => {
-                setPlayers((prev) =>
-                    prev.map((p) =>
-                        p.id.toString() === event.playerId.toString()
-                            ? { ...p, score: event.newScore }
-                            : p,
-                    ),
-                );
-            },
-        );
-
-        return () => {
-            window.Echo.leave(`room.${roomId}`);
-        };
-    }, [roomId]);
+    // Listen for score updated
+    useEchoPublic(
+        roomId ? `room.${roomId}` : "",
+        "ScoreUpdatedEvent",
+        (event: {
+            playerId: number;
+            playerName: string;
+            oldScore: number;
+            newScore: number;
+        }) => {
+            setPlayers((prev) =>
+                prev.map((p) =>
+                    p.id.toString() === event.playerId.toString()
+                        ? { ...p, score: event.newScore }
+                        : p,
+                ),
+            );
+        },
+    );
 
     const createRoom = async () => {
         try {
@@ -176,12 +170,16 @@ export function QuizProvider({ children }: { children: ReactNode }) {
             setRoomId(room.id.toString());
             setRoomCode(room.room_code);
             // プレイヤー一覧を取得してContextに設定（QuestionGradedEvent受信のため）
-            const { players: roomPlayers } = await playerApi.getPlayers(room.id);
-            setPlayers(roomPlayers.map(p => ({
-                id: p.id,
-                name: p.name,
-                score: p.score,
-            })));
+            const { players: roomPlayers } = await playerApi.getPlayers(
+                room.id,
+            );
+            setPlayers(
+                roomPlayers.map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    score: p.score,
+                })),
+            );
         } catch (error) {
             console.error("Failed to join room:", error);
             throw error;

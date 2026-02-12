@@ -1,0 +1,75 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: quiz_app
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:8080:80'
+    env_file: .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - quiz_app_network
+
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: quiz_queue
+    restart: unless-stopped
+    command: php artisan queue:work --tries=3
+    env_file: .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - quiz_app_network
+
+  reverb:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: quiz_reverb
+    restart: unless-stopped
+    command: php artisan reverb:start --host=0.0.0.0 --port=8080
+    ports:
+      - '127.0.0.1:8081:8080'
+    env_file: .env
+    depends_on:
+      - app
+      - db
+      - redis
+    networks:
+      - quiz_app_network
+
+  db:
+    image: mysql:8.0
+    container_name: quiz_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+    volumes:
+      - quiz_db_data:/var/lib/mysql
+      - ./docker/mysql/initdb.d:/docker-entrypoint-initdb.d
+    networks:
+      - quiz_app_network
+
+  redis:
+    image: redis:alpine
+    container_name: quiz_redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    networks:
+      - quiz_app_network
+
+volumes:
+  quiz_db_data:
+
+networks:
+  quiz_app_network:

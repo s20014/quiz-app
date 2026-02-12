@@ -1,4 +1,5 @@
-import axios from 'axios';
-window.axios = axios;
+import { configureEcho } from "@laravel/echo-react";
 
-window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+configureEcho({
+    broadcaster: "reverb",
+});
