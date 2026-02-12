@@ -26,6 +26,7 @@ export default defineConfig({
                       port: process.env.VITE_HMR_PORT
                           ? parseInt(process.env.VITE_HMR_PORT)
                           : 5173,
+                      protocol: "wss",
                   },
     },
     resolve: {
