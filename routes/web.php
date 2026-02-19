@@ -22,9 +22,3 @@ Route::get('/play/{roomId}/answer', function ($roomId) {
         'roomId' => $roomId
     ]);
 });
-
-Route::get('/leaderboard/{roomId}', function ($roomId) {
-    return Inertia::render('Leaderboard', [
-        'roomId' => $roomId
-    ]);
-});

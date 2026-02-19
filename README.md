@@ -13,6 +13,7 @@ QRコードでスマホから簡単に参加でき、WebSocketによる双方向
 ## 📋 主な機能
 
 ### ホスト側
+
 - ✅ QRコードによるルーム作成・共有
 - ✅ 参加者のリアルタイム表示
 - ✅ 3種類の問題形式（マルバツ / 4択 / テキスト入力）
@@ -21,6 +22,7 @@ QRコードでスマホから簡単に参加でき、WebSocketによる双方向
 - ✅ リーダーボード表示
 
 ### 参加者側
+
 - ✅ QRコードスキャンで簡単参加
 - ✅ 名前入力のみ（認証不要）
 - ✅ リアルタイム問題表示
@@ -32,6 +34,7 @@ QRコードでスマホから簡単に参加でき、WebSocketによる双方向
 ## 🛠 技術スタック
 
 ### フロントエンド
+
 - **React 18** + **TypeScript**
 - **Inertia.js** - Laravel × React のシームレスな統合
 - **Tailwind CSS** - モダンなスタイリング
@@ -40,12 +43,14 @@ QRコードでスマホから簡単に参加でき、WebSocketによる双方向
 - **react-qr-code** - QRコード生成
 
 ### バックエンド
+
 - **Laravel 12** (PHP 8.4)
 - **MySQL 8.0**
 - **Redis** - セッション/キャッシュ管理
 - **Laravel Reverb** - WebSocketサーバー（リアルタイム通信）
 
 ### 開発環境
+
 - **Docker** + **Docker Compose**
 - **Apache** (Webサーバー)
 - **phpMyAdmin** (DB管理ツール)
@@ -94,7 +99,21 @@ cp .env.example .env
 php artisan key:generate
 ```
 
-### 6. データベースのセットアップ
+### 6. SSL証明書の生成（開発環境用）
+
+```bash
+# 開発用の自己署名証明書を生成
+mkdir -p docker/nginx/certs
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout docker/nginx/certs/key.pem \
+  -out docker/nginx/certs/cert.pem \
+  -subj "/CN=localhost"
+```
+
+> **注意**: 証明書ファイル（`.pem`, `.key`）は `.gitignore` で除外されています。
+> 本番環境では Let's Encrypt などの正式な証明書を使用してください。
+
+### 7. データベースのセットアップ
 
 ```bash
 # マイグレーション実行
@@ -104,7 +123,7 @@ php artisan migrate
 php artisan db:seed
 ```
 
-### 7. フロントエンドのビルド
+### 8. フロントエンドのビルド
 
 ```bash
 # 開発サーバー起動（ホットリロード有効）
@@ -114,7 +133,7 @@ npm run dev
 npm run build
 ```
 
-### 8. Reverbサーバーの起動（WebSocket）
+### 9. Reverbサーバーの起動（WebSocket）
 
 別のターミナルで:
 
@@ -123,7 +142,7 @@ docker exec -it quiz_app bash
 php artisan reverb:start
 ```
 
-### 9. アプリケーションにアクセス
+### 10. アプリケーションにアクセス
 
 - **メインアプリ**: http://localhost
 - **Vite開発サーバー**: http://localhost:5173
@@ -232,6 +251,7 @@ docker exec -it quiz_app php artisan test
 **症状**: 参加者が増えない、リアルタイム更新が動かない
 
 **解決方法**:
+
 ```bash
 # Reverbが起動しているか確認
 docker exec -it quiz_app php artisan reverb:start
@@ -245,6 +265,7 @@ REVERB_PORT=8080
 ### Viteがホットリロードされない
 
 **解決方法**:
+
 ```bash
 # vite.config.ts で server.host を '0.0.0.0' に設定
 # docker-compose.yml でポート5173を開放
@@ -253,6 +274,7 @@ REVERB_PORT=8080
 ### MySQLに接続できない
 
 **解決方法**:
+
 ```bash
 # .envの設定を確認
 DB_HOST=db
@@ -266,6 +288,7 @@ docker-compose ps
 ### npm installでエラーが出る
 
 **解決方法**:
+
 ```bash
 # node_modulesを削除して再インストール
 docker exec -it quiz_app rm -rf node_modules
@@ -280,6 +303,7 @@ docker exec -it quiz_app npm install
 - ✅ XSS対策（React自動エスケープ）
 - ✅ SQLインジェクション対策（Eloquent ORM）
 - ✅ 環境変数による機密情報管理
+- ⚠️ **SSL証明書と秘密鍵はGitにコミットしないこと**（`.gitignore`で除外済み）
 
 ---
 
