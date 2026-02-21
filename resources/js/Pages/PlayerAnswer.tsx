@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Link } from '@inertiajs/react';
 import { useQuiz } from '@/Contexts/QuizContext';
 import { playerApi } from '@/services/api';
 import type { Player } from '@/Contexts/QuizContext';
@@ -8,6 +7,7 @@ import { Input } from '@/Components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Badge } from '@/Components/ui/badge';
 import { Check, X, Trophy, Clock } from 'lucide-react';
+import LeaderboardModal from '@/Components/LeaderboardModal';
 
 interface Props {
   roomId: string;
@@ -17,9 +17,16 @@ export default function PlayerAnswer({ roomId }: Props) {
   const { players, currentQuestion, isAcceptingAnswers, submitAnswer, joinRoom } = useQuiz();
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedAnswer, setSelectedAnswer] = useState<string>('');
-  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [hasSubmitted, setHasSubmittedState] = useState<boolean>(() => {
+    return sessionStorage.getItem('hasSubmitted') === 'true';
+  });
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+
+  const setHasSubmitted = (value: boolean) => {
+    setHasSubmittedState(value);
+    sessionStorage.setItem('hasSubmitted', value.toString());
+  };
 
   // Join room channel to receive events
   useEffect(() => {
@@ -31,7 +38,6 @@ export default function PlayerAnswer({ roomId }: Props) {
     const fetchPlayer = async () => {
       const storedPlayerId = sessionStorage.getItem('playerId');
       if (!storedPlayerId) {
-        setIsLoading(false);
         return;
       }
 
@@ -51,8 +57,6 @@ export default function PlayerAnswer({ roomId }: Props) {
         }
       } catch (error) {
         console.error('Failed to fetch player:', error);
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -256,14 +260,14 @@ export default function PlayerAnswer({ roomId }: Props) {
 
         {/* リーダーボードボタン */}
         <div className="mt-6 text-center">
-          <Link href={`/leaderboard/${roomId}`}>
-            <Button variant="outline" size="lg" className="gap-2">
-              <Trophy className="w-5 h-5 text-yellow-500" />
-              リーダーボードを見る
-            </Button>
-          </Link>
+          <Button variant="outline" size="lg" className="gap-2" onClick={() => setShowLeaderboard(true)}>
+            <Trophy className="w-5 h-5 text-yellow-500" />
+            リーダーボードを見る
+          </Button>
         </div>
       </div>
+
+      <LeaderboardModal isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)} />
     </div>
   );
 }
