@@ -63,83 +63,81 @@ export default function LeaderboardModal({ isOpen, onClose }: Props) {
                         <p className="text-gray-600">現在の順位とスコア</p>
                     </div>
 
-                    {/* トップ3 */}
+                    {/* 表彰台 */}
                     {sortedPlayers.length > 0 && (
-                        <div className="grid md:grid-cols-3 gap-4 mb-8">
+                        <div className="flex items-end justify-center gap-3 mb-10">
                             {/* 2位 */}
-                            {sortedPlayers[1] && (
-                                <div className="md:order-1 order-2">
-                                    <Card className="border-2 border-gray-300 bg-linear-to-br from-gray-50 to-gray-100">
-                                        <CardContent className="pt-6 text-center">
-                                            <div className="flex justify-center mb-3">
-                                                <Medal className="w-12 h-12 text-gray-400" />
-                                            </div>
-                                            <div className="text-6xl font-bold text-gray-400 mb-2">
+                            <div className="flex flex-col items-center w-28">
+                                {sortedPlayers[1] ? (
+                                    <>
+                                        <Medal className="w-9 h-9 text-gray-400 mb-1" />
+                                        <p className="font-semibold text-sm text-center mb-1 truncate w-full">
+                                            {sortedPlayers[1].name}
+                                        </p>
+                                        <div className="flex items-center gap-1 mb-2">
+                                            <Trophy className="w-4 h-4 text-yellow-500" />
+                                            <p className="text-lg font-bold text-indigo-600">
+                                                {sortedPlayers[1].score}
+                                            </p>
+                                        </div>
+                                        <div className="w-full h-24 bg-linear-to-b from-gray-300 to-gray-500 rounded-t-xl flex items-center justify-center shadow-md">
+                                            <span className="text-4xl font-bold text-white">
                                                 {getRank(1)}
-                                            </div>
-                                            <p className="text-lg font-semibold mb-2">
-                                                {sortedPlayers[1].name}
-                                            </p>
-                                            <div className="flex items-center justify-center gap-2">
-                                                <Trophy className="w-5 h-5 text-yellow-500" />
-                                                <p className="text-2xl font-bold text-indigo-600">
-                                                    {sortedPlayers[1].score}
-                                                </p>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </div>
-                            )}
+                                            </span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="w-full h-24 bg-gray-100 rounded-t-xl" />
+                                )}
+                            </div>
 
-                            {/* 1位（中央・大きめ） */}
-                            {sortedPlayers[0] && (
-                                <div className="md:order-2 order-1">
-                                    <Card className="border-4 border-yellow-400 bg-linear-to-br from-yellow-50 to-amber-100 md:transform md:scale-110">
-                                        <CardContent className="pt-8 text-center">
-                                            <div className="flex justify-center mb-4">
-                                                <Crown className="w-16 h-16 text-yellow-500" />
-                                            </div>
-                                            <div className="text-7xl font-bold text-yellow-600 mb-3">
-                                                {getRank(0)}
-                                            </div>
-                                            <p className="text-xl font-bold mb-3">
-                                                {sortedPlayers[0].name}
+                            {/* 1位（中央・最高） */}
+                            <div className="flex flex-col items-center w-32">
+                                {sortedPlayers[0] && (
+                                    <>
+                                        <Crown className="w-11 h-11 text-yellow-500 mb-1" />
+                                        <p className="font-bold text-base text-center mb-1 truncate w-full">
+                                            {sortedPlayers[0].name}
+                                        </p>
+                                        <div className="flex items-center gap-1 mb-2">
+                                            <Trophy className="w-5 h-5 text-yellow-600" />
+                                            <p className="text-xl font-bold text-indigo-600">
+                                                {sortedPlayers[0].score}
                                             </p>
-                                            <div className="flex items-center justify-center gap-2">
-                                                <Trophy className="w-6 h-6 text-yellow-600" />
-                                                <p className="text-3xl font-bold text-indigo-600">
-                                                    {sortedPlayers[0].score}
-                                                </p>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </div>
-                            )}
+                                        </div>
+                                        <div className="w-full h-36 bg-linear-to-b from-yellow-400 to-yellow-600 rounded-t-xl flex items-center justify-center shadow-lg">
+                                            <span className="text-5xl font-bold text-white">
+                                                {getRank(0)}
+                                            </span>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
 
                             {/* 3位 */}
-                            {sortedPlayers[2] && (
-                                <div className="md:order-3 order-3">
-                                    <Card className="border-2 border-amber-600 bg-linear-to-br from-amber-50 to-orange-100">
-                                        <CardContent className="pt-6 text-center">
-                                            <div className="flex justify-center mb-3">
-                                                <Award className="w-12 h-12 text-amber-600" />
-                                            </div>
-                                            <div className="text-6xl font-bold text-amber-600 mb-2">
-                                                {getRank(2)}
-                                            </div>
-                                            <p className="text-lg font-semibold mb-2">
-                                                {sortedPlayers[2].name}
+                            <div className="flex flex-col items-center w-28">
+                                {sortedPlayers[2] ? (
+                                    <>
+                                        <Award className="w-9 h-9 text-amber-600 mb-1" />
+                                        <p className="font-semibold text-sm text-center mb-1 truncate w-full">
+                                            {sortedPlayers[2].name}
+                                        </p>
+                                        <div className="flex items-center gap-1 mb-2">
+                                            <Trophy className="w-4 h-4 text-yellow-500" />
+                                            <p className="text-lg font-bold text-indigo-600">
+                                                {sortedPlayers[2].score}
                                             </p>
-                                            <div className="flex items-center justify-center gap-2">
-                                                <Trophy className="w-5 h-5 text-yellow-500" />
-                                                <p className="text-2xl font-bold text-indigo-600">
-                                                    {sortedPlayers[2].score}
-                                                </p>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </div>
-                            )}
+                                        </div>
+                                        <div className="w-full h-16 bg-linear-to-b from-amber-500 to-amber-700 rounded-t-xl flex items-center justify-center shadow-md">
+                                            <span className="text-3xl font-bold text-white">
+                                                {getRank(2)}
+                                            </span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="w-full h-16 bg-gray-100 rounded-t-xl" />
+                                )}
+                            </div>
                         </div>
                     )}
 
