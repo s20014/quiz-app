@@ -12,8 +12,9 @@ import {
     CardTitle,
 } from "@/Components/ui/card";
 import { Badge } from "@/Components/ui/badge";
-import { Check, X, Trophy, Clock, Circle } from "lucide-react";
+import { Check, X, Trophy, Clock, Circle, Users } from "lucide-react";
 import LeaderboardModal from "@/Components/LeaderboardModal";
+import PlayersStatusModal from "@/Components/PlayersStatusModal";
 import { toast } from "sonner";
 
 interface Props {
@@ -35,6 +36,7 @@ export default function PlayerAnswer({ roomId }: Props) {
         return sessionStorage.getItem("hasSubmitted") === "true";
     });
     const [showLeaderboard, setShowLeaderboard] = useState(false);
+    const [showPlayersStatus, setShowPlayersStatus] = useState(false);
     const [isKicked, setIsKicked] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     // fetchPlayer完了フラグ（これがtrueになるまでリセットeffectをスキップ）
@@ -311,60 +313,75 @@ export default function PlayerAnswer({ roomId }: Props) {
                         <CardContent className="space-y-4">
                             {currentQuestion.type === "true-false" && (
                                 <div className="grid grid-cols-2 gap-4">
-                                    <Button
-                                        size="lg"
-                                        variant={
-                                            selectedAnswer === "true"
-                                                ? "default"
-                                                : "outline"
-                                        }
+                                    <button
+                                        type="button"
                                         onClick={() =>
                                             setSelectedAnswer("true")
                                         }
                                         disabled={!isAcceptingAnswers}
-                                        className="h-24 text-lg"
+                                        className={`p-8 rounded-xl border-2 transition-all hover:scale-105 flex items-center justify-center ${
+                                            selectedAnswer === "true"
+                                                ? "border-green-500 bg-green-50 shadow-lg"
+                                                : "border-gray-200 bg-white hover:border-gray-300"
+                                        } ${!isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                                     >
-                                        <Circle className="w-6 h-6 mr-2" />
-                                        マル
-                                    </Button>
-                                    <Button
-                                        size="lg"
-                                        variant={
-                                            selectedAnswer === "false"
-                                                ? "default"
-                                                : "outline"
-                                        }
+                                        <Circle
+                                            className={`w-16 h-16 ${
+                                                selectedAnswer === "true"
+                                                    ? "text-green-600"
+                                                    : "text-gray-400"
+                                            }`}
+                                        />
+                                    </button>
+                                    <button
+                                        type="button"
                                         onClick={() =>
                                             setSelectedAnswer("false")
                                         }
                                         disabled={!isAcceptingAnswers}
-                                        className="h-24 text-lg"
+                                        className={`p-8 rounded-xl border-2 transition-all hover:scale-105 flex items-center justify-center ${
+                                            selectedAnswer === "false"
+                                                ? "border-red-500 bg-red-50 shadow-lg"
+                                                : "border-gray-200 bg-white hover:border-gray-300"
+                                        } ${!isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                                     >
-                                        <X className="w-6 h-6 mr-2" />
-                                        バツ
-                                    </Button>
+                                        <X
+                                            className={`w-16 h-16 ${
+                                                selectedAnswer === "false"
+                                                    ? "text-red-600"
+                                                    : "text-gray-400"
+                                            }`}
+                                        />
+                                    </button>
                                 </div>
                             )}
 
                             {currentQuestion.type === "multiple-choice" && (
                                 <div className="grid grid-cols-2 gap-4">
                                     {["A", "B", "C", "D"].map((option) => (
-                                        <Button
+                                        <button
                                             key={option}
-                                            size="lg"
-                                            variant={
-                                                selectedAnswer === option
-                                                    ? "default"
-                                                    : "outline"
-                                            }
+                                            type="button"
                                             onClick={() =>
                                                 setSelectedAnswer(option)
                                             }
                                             disabled={!isAcceptingAnswers}
-                                            className="h-24 text-xl font-bold"
+                                            className={`p-8 rounded-xl border-2 transition-all hover:scale-105 ${
+                                                selectedAnswer === option
+                                                    ? "border-indigo-500 bg-indigo-50 shadow-lg"
+                                                    : "border-gray-200 bg-white hover:border-gray-300"
+                                            } ${!isAcceptingAnswers ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                                         >
-                                            {option}
-                                        </Button>
+                                            <p
+                                                className={`text-5xl font-bold ${
+                                                    selectedAnswer === option
+                                                        ? "text-indigo-600"
+                                                        : "text-gray-400"
+                                                }`}
+                                            >
+                                                {option}
+                                            </p>
+                                        </button>
                                     ))}
                                 </div>
                             )}
@@ -403,12 +420,21 @@ export default function PlayerAnswer({ roomId }: Props) {
                     ルームID: {roomId}
                 </p>
 
-                {/* リーダーボードボタン */}
-                <div className="mt-6 text-center">
+                {/* ボタン群 */}
+                <div className="mt-6 flex flex-col gap-3">
                     <Button
                         variant="outline"
                         size="lg"
-                        className="gap-2"
+                        className="w-full gap-2 cursor-pointer"
+                        onClick={() => setShowPlayersStatus(true)}
+                    >
+                        <Users className="w-5 h-5 text-indigo-500" />
+                        みんなの回答状況を見る
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="lg"
+                        className="w-full gap-2 cursor-pointer"
                         onClick={() => setShowLeaderboard(true)}
                     >
                         <Trophy className="w-5 h-5 text-yellow-500" />
@@ -417,6 +443,10 @@ export default function PlayerAnswer({ roomId }: Props) {
                 </div>
             </div>
 
+            <PlayersStatusModal
+                isOpen={showPlayersStatus}
+                onClose={() => setShowPlayersStatus(false)}
+            />
             <LeaderboardModal
                 isOpen={showLeaderboard}
                 onClose={() => setShowLeaderboard(false)}

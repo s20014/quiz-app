@@ -296,17 +296,29 @@ export default function Host() {
                                                         player.answer !==
                                                             undefined && (
                                                             <div className="flex gap-2 mt-1 flex-wrap">
-                                                                <Badge
-                                                                    variant={
-                                                                        player.isCorrect
-                                                                            ? "default"
-                                                                            : "secondary"
-                                                                    }
-                                                                >
-                                                                    {player.isCorrect
-                                                                        ? "正解"
-                                                                        : "不正解"}
-                                                                </Badge>
+                                                                {player.isCorrect !==
+                                                                undefined ? (
+                                                                    <Badge
+                                                                        variant={
+                                                                            player.isCorrect
+                                                                                ? "default"
+                                                                                : "secondary"
+                                                                        }
+                                                                        className={
+                                                                            player.isCorrect
+                                                                                ? "bg-green-500 hover:bg-green-500"
+                                                                                : ""
+                                                                        }
+                                                                    >
+                                                                        {player.isCorrect
+                                                                            ? "正解"
+                                                                            : "不正解"}
+                                                                    </Badge>
+                                                                ) : (
+                                                                    <Badge variant="outline">
+                                                                        回答済み
+                                                                    </Badge>
+                                                                )}
                                                                 {player.isCorrect !==
                                                                     undefined && (
                                                                     <Badge variant="outline">

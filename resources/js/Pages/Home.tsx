@@ -39,7 +39,7 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <Link href="/host">
-                  <Button className="w-full" size="lg">
+                  <Button className="w-full cursor-pointer" size="lg">
                     ホスト画面を開く
                   </Button>
                 </Link>
@@ -68,7 +68,7 @@ export default function Home() {
                       onChange={(e) => setRoomId(e.target.value.toLowerCase())}
                     />
                   </div>
-                  <Button type="submit" className="w-full" size="lg" disabled={!roomId.trim()}>
+                  <Button type="submit" className="w-full cursor-pointer" size="lg" disabled={!roomId.trim()}>
                     参加する
                   </Button>
                   <p className="text-xs text-gray-500 text-center">
