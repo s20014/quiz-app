@@ -66,7 +66,6 @@ export default function Home() {
                       placeholder="例: abc123"
                       value={roomId}
                       onChange={(e) => setRoomId(e.target.value.toLowerCase())}
-                      className="uppercase"
                     />
                   </div>
                   <Button type="submit" className="w-full" size="lg" disabled={!roomId.trim()}>

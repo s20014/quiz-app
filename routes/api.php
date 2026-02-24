@@ -15,7 +15,9 @@ Route::get('/rooms/{roomId}/players', [PlayerController::class, 'index']);
 Route::get('/players/{playerId}', [PlayerController::class, 'show']);
 Route::post('/players/{playerId}/answer', [PlayerController::class, 'submitAnswer']);
 Route::patch('/players/{playerId}/score', [PlayerController::class, 'updateScore']);
+Route::delete('/players/{playerId}', [PlayerController::class, 'destroy']);
 
 // Question management
 Route::post('/rooms/{roomId}/questions', [QuestionController::class, 'store']);
 Route::post('/rooms/{roomId}/questions/grade', [QuestionController::class, 'grade']);
+Route::post('/rooms/{roomId}/questions/reset', [QuestionController::class, 'reset']);

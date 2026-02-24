@@ -6,6 +6,8 @@
 
         <title inertia>{{ config('app.name', 'Laravel') }}</title>
 
+        <link rel="icon" type="image/png" href="/quiz.png">
+
         <!-- Scripts -->
         @if(app()->environment('local'))
             @viteReactRefresh
