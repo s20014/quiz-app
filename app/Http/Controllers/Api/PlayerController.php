@@ -109,6 +109,23 @@ class PlayerController extends Controller
     }
 
     /**
+     * Kick a player from the room
+     */
+    public function destroy($playerId)
+    {
+        $player = Player::findOrFail($playerId);
+
+        event(new \App\Events\PlayerKickedEvent($player));
+
+        $player->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Player kicked successfully',
+        ]);
+    }
+
+    /**
      * Update player score
      */
     public function updateScore(Request $request, $playerId)

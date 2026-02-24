@@ -15,6 +15,14 @@ export default function LeaderboardModal({ isOpen, onClose }: Props) {
 
     const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
 
+    // 同点のプレイヤーには同じ順位を返す (例: 1,1,1,4,5)
+    const getRank = (index: number): number => {
+        if (index === 0) return 1;
+        return sortedPlayers[index].score === sortedPlayers[index - 1].score
+            ? getRank(index - 1)
+            : index + 1;
+    };
+
     const getRankBadgeColor = (rank: number) => {
         if (rank === 1)
             return "bg-linear-to-br from-yellow-400 to-yellow-600 text-white";
@@ -67,7 +75,7 @@ export default function LeaderboardModal({ isOpen, onClose }: Props) {
                                                 <Medal className="w-12 h-12 text-gray-400" />
                                             </div>
                                             <div className="text-6xl font-bold text-gray-400 mb-2">
-                                                2
+                                                {getRank(1)}
                                             </div>
                                             <p className="text-lg font-semibold mb-2">
                                                 {sortedPlayers[1].name}
@@ -92,7 +100,7 @@ export default function LeaderboardModal({ isOpen, onClose }: Props) {
                                                 <Crown className="w-16 h-16 text-yellow-500" />
                                             </div>
                                             <div className="text-7xl font-bold text-yellow-600 mb-3">
-                                                1
+                                                {getRank(0)}
                                             </div>
                                             <p className="text-xl font-bold mb-3">
                                                 {sortedPlayers[0].name}
@@ -117,7 +125,7 @@ export default function LeaderboardModal({ isOpen, onClose }: Props) {
                                                 <Award className="w-12 h-12 text-amber-600" />
                                             </div>
                                             <div className="text-6xl font-bold text-amber-600 mb-2">
-                                                3
+                                                {getRank(2)}
                                             </div>
                                             <p className="text-lg font-semibold mb-2">
                                                 {sortedPlayers[2].name}
@@ -142,7 +150,7 @@ export default function LeaderboardModal({ isOpen, onClose }: Props) {
                                 その他の参加者
                             </h2>
                             {sortedPlayers.slice(3).map((player, index) => {
-                                const rank = index + 4;
+                                const rank = getRank(index + 3);
                                 return (
                                     <Card
                                         key={player.id}

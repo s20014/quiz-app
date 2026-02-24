@@ -38,8 +38,9 @@ interface QuizContextType {
     submitAnswer: (playerId: string, answer: string | boolean) => Promise<void>;
     gradeQuestion: () => Promise<void>;
     calculateScores: () => void;
-    resetQuestion: () => void;
+    resetQuestion: () => Promise<void>;
     updatePlayerScore: (playerId: string, newScore: number) => Promise<void>;
+    kickPlayer: (playerId: string) => Promise<void>;
 }
 
 const QuizContext = createContext<QuizContextType | undefined>(undefined);
@@ -56,15 +57,33 @@ export function QuizProvider({ children }: { children: ReactNode }) {
     useEchoPublic(
         roomId ? `room.${roomId}` : "",
         "PlayerJoinedEvent",
-        (event: { player: Player }) => {
+        useCallback((event: { player: Player }) => {
             setPlayers((prev) => {
-                // Check if player already exists
-                const exists = prev.some((p) => p.id === event.player.id);
+                // IDを文字列比較して重複チェック
+                const exists = prev.some(
+                    (p) => p.id.toString() === event.player.id.toString(),
+                );
                 if (exists) return prev;
-
                 return [...prev, event.player];
             });
-        },
+        }, []),
+    );
+
+    // Listen for question reset
+    useEchoPublic(
+        roomId ? `room.${roomId}` : "",
+        "QuestionResetEvent",
+        useCallback(() => {
+            setCurrentQuestionInternal(null);
+            setIsAcceptingAnswers(false);
+            setPlayers((prev) =>
+                prev.map((p) => ({
+                    ...p,
+                    answer: undefined,
+                    isCorrect: undefined,
+                })),
+            );
+        }, []),
     );
 
     // Listen for question asked
@@ -137,20 +156,36 @@ export function QuizProvider({ children }: { children: ReactNode }) {
     useEchoPublic(
         roomId ? `room.${roomId}` : "",
         "ScoreUpdatedEvent",
-        (event: {
-            playerId: number;
-            playerName: string;
-            oldScore: number;
-            newScore: number;
-        }) => {
+        useCallback(
+            (event: {
+                playerId: number;
+                playerName: string;
+                oldScore: number;
+                newScore: number;
+            }) => {
+                setPlayers((prev) =>
+                    prev.map((p) =>
+                        p.id.toString() === event.playerId.toString()
+                            ? { ...p, score: event.newScore }
+                            : p,
+                    ),
+                );
+            },
+            [],
+        ),
+    );
+
+    // Listen for player kicked
+    useEchoPublic(
+        roomId ? `room.${roomId}` : "",
+        "PlayerKickedEvent",
+        useCallback((event: { player_id: number }) => {
             setPlayers((prev) =>
-                prev.map((p) =>
-                    p.id.toString() === event.playerId.toString()
-                        ? { ...p, score: event.newScore }
-                        : p,
+                prev.filter(
+                    (p) => p.id.toString() !== event.player_id.toString(),
                 ),
             );
-        },
+        }, []),
     );
 
     const createRoom = async () => {
@@ -169,17 +204,43 @@ export function QuizProvider({ children }: { children: ReactNode }) {
             const { room } = await roomApi.getRoom(roomCodeParam);
             setRoomId(room.id.toString());
             setRoomCode(room.room_code);
+
+            // DBの問題状態を復元（ホストのリロード対応）
+            if (room.current_question) {
+                const q = room.current_question as {
+                    type: QuestionType;
+                    correctAnswer?: string | boolean;
+                    accepting_answers?: boolean;
+                };
+                setCurrentQuestionInternal({
+                    type: q.type,
+                    correctAnswer: q.correctAnswer,
+                });
+                setIsAcceptingAnswers(q.accepting_answers === true);
+            }
+
             // プレイヤー一覧を取得してContextに設定（QuestionGradedEvent受信のため）
             const { players: roomPlayers } = await playerApi.getPlayers(
                 room.id,
             );
-            setPlayers(
-                roomPlayers.map((p) => ({
+            // 関数形式のupdateで、WebSocketで受け取った差分を失わないようにマージ
+            setPlayers((prev) => {
+                const dbPlayers = roomPlayers.map((p) => ({
                     id: p.id,
                     name: p.name,
                     score: p.score,
-                })),
-            );
+                }));
+                const playerMap = new Map<string, Player>(
+                    dbPlayers.map((p) => [p.id.toString(), p]),
+                );
+                // DBにまだ反映されていないイベント受信済みプレイヤーも保持
+                for (const p of prev) {
+                    if (!playerMap.has(p.id.toString())) {
+                        playerMap.set(p.id.toString(), p);
+                    }
+                }
+                return Array.from(playerMap.values());
+            });
         } catch (error) {
             console.error("Failed to join room:", error);
             throw error;
@@ -265,7 +326,9 @@ export function QuizProvider({ children }: { children: ReactNode }) {
         );
     };
 
-    const resetQuestion = () => {
+    const resetQuestion = async () => {
+        if (!roomId) return;
+        // ローカル状態を即時リセット
         setPlayers((prev) =>
             prev.map((p) => ({
                 ...p,
@@ -275,6 +338,12 @@ export function QuizProvider({ children }: { children: ReactNode }) {
         );
         setCurrentQuestionInternal(null);
         setIsAcceptingAnswers(false);
+        // バックエンドに通知してプレイヤー側にも broadcast
+        try {
+            await questionApi.resetQuestion(roomId);
+        } catch (error) {
+            console.error("Failed to reset question:", error);
+        }
     };
 
     const updatePlayerScore = async (playerId: string, newScore: number) => {
@@ -283,6 +352,16 @@ export function QuizProvider({ children }: { children: ReactNode }) {
             // The event listener will update the local state
         } catch (error) {
             console.error("Failed to update score:", error);
+            throw error;
+        }
+    };
+
+    const kickPlayer = async (playerId: string) => {
+        try {
+            await playerApi.kickPlayer(playerId);
+            // The event listener will remove the player from local state
+        } catch (error) {
+            console.error("Failed to kick player:", error);
             throw error;
         }
     };
@@ -306,6 +385,7 @@ export function QuizProvider({ children }: { children: ReactNode }) {
                 calculateScores,
                 resetQuestion,
                 updatePlayerScore,
+                kickPlayer,
             }}
         >
             {children}

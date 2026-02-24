@@ -20,7 +20,18 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/Components/ui/dialog";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/Components/ui/alert-dialog";
 import QRCode from "react-qr-code";
+import { toast } from "sonner";
 import {
     Check,
     Circle,
@@ -34,28 +45,45 @@ import {
     ListOrdered,
     Type,
     Pencil,
+    UserMinus,
 } from "lucide-react";
 import type { QuestionType } from "@/Contexts/QuizContext";
 
 export default function Host() {
     const {
-        roomId,
         roomCode,
         players,
         currentQuestion,
         isAcceptingAnswers,
         createRoom,
+        joinRoom,
         setCurrentQuestion,
         startAcceptingAnswers,
-        stopAcceptingAnswers,
         gradeQuestion,
         resetQuestion,
         updatePlayerScore,
+        kickPlayer,
     } = useQuiz();
 
-    // Create room on component mount
+    // ルームコードをlocalStorageに保存（リロード復元用）
     useEffect(() => {
-        createRoom();
+        if (roomCode) {
+            localStorage.setItem("hostRoomCode", roomCode);
+        }
+    }, [roomCode]);
+
+    // リロード時は保存済みのルームに復帰、なければ新規作成
+    useEffect(() => {
+        const savedRoomCode = localStorage.getItem("hostRoomCode");
+        if (savedRoomCode) {
+            joinRoom(savedRoomCode).catch(() => {
+                // ルームが存在しない場合は新規作成
+                localStorage.removeItem("hostRoomCode");
+                createRoom();
+            });
+        } else {
+            createRoom();
+        }
     }, []);
 
     const [selectedType, setSelectedType] =
@@ -69,8 +97,31 @@ export default function Host() {
     const [newScore, setNewScore] = useState<string>("");
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [canSetAnswer, setCanSetAnswer] = useState(true); // 初期状態は設定可能
+    const [kickTarget, setKickTarget] = useState<{
+        id: string | number;
+        name: string;
+    } | null>(null);
 
-    const playerUrl = roomCode ? `${window.location.origin}/play/${roomCode}` : '';
+    // リロード復元時: currentQuestion の変化に合わせてローカルUI状態を同期
+    useEffect(() => {
+        if (currentQuestion) {
+            setSelectedType(currentQuestion.type);
+            setCanSetAnswer(false);
+            if (currentQuestion.correctAnswer !== undefined) {
+                if (typeof currentQuestion.correctAnswer === "boolean") {
+                    setCorrectAnswer(
+                        currentQuestion.correctAnswer ? "true" : "false",
+                    );
+                } else {
+                    setCorrectAnswer(currentQuestion.correctAnswer as string);
+                }
+            }
+        }
+    }, [currentQuestion]);
+
+    const playerUrl = roomCode
+        ? `${window.location.origin}/play/${roomCode}`
+        : "";
 
     const handleStartQuestion = () => {
         setCurrentQuestion({
@@ -89,25 +140,44 @@ export default function Host() {
             await gradeQuestion();
             // stopAcceptingAnswers is automatically called by gradeQuestion
         } catch (error) {
-            console.error('Failed to grade question:', error);
-            alert('採点に失敗しました');
+            console.error("Failed to grade question:", error);
+            toast.error("採点に失敗しました");
         }
     };
 
-    const handleReset = () => {
-        resetQuestion();
+    const handleReset = async () => {
+        await resetQuestion();
         setCorrectAnswer("");
         setCanSetAnswer(true); // リセット後は正解設定を有効にする
     };
 
     const handleOpenEditScore = (player: {
-        id: string;
+        id: string | number;
         name: string;
         score: number;
     }) => {
-        setEditingPlayer(player);
+        setEditingPlayer({ ...player, id: player.id.toString() });
         setNewScore(player.score.toString());
         setIsDialogOpen(true);
+    };
+
+    const handleKickPlayer = (player: {
+        id: string | number;
+        name: string;
+    }) => {
+        setKickTarget(player);
+    };
+
+    const handleConfirmKick = async () => {
+        if (!kickTarget) return;
+        try {
+            await kickPlayer(kickTarget.id.toString());
+            toast.success(`${kickTarget.name} をキックしました`);
+        } catch {
+            toast.error("キックに失敗しました");
+        } finally {
+            setKickTarget(null);
+        }
     };
 
     const handleSaveScore = async () => {
@@ -115,13 +185,16 @@ export default function Host() {
             const scoreValue = parseInt(newScore, 10);
             if (!isNaN(scoreValue) && scoreValue >= 0) {
                 try {
-                    await updatePlayerScore(editingPlayer.id.toString(), scoreValue);
+                    await updatePlayerScore(
+                        editingPlayer.id.toString(),
+                        scoreValue,
+                    );
                     setIsDialogOpen(false);
                     setEditingPlayer(null);
                     setNewScore("");
                 } catch (error) {
-                    console.error('Failed to update score:', error);
-                    alert('スコアの更新に失敗しました');
+                    console.error("Failed to update score:", error);
+                    toast.error("スコアの更新に失敗しました");
                 }
             }
         }
@@ -138,12 +211,31 @@ export default function Host() {
     const answeredCount = players.filter((p) => p.answer !== undefined).length;
     const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
 
+    // 同点のプレイヤーには同じ順位を返す (例: 1,1,1,4,5)
+    const getRank = (index: number): number => {
+        if (index === 0) return 1;
+        return sortedPlayers[index].score === sortedPlayers[index - 1].score
+            ? getRank(index - 1)
+            : index + 1;
+    };
+
     return (
         <div className="min-h-screen bg-linear-to-br from-indigo-50 to-purple-50 p-4">
             <div className="max-w-7xl mx-auto">
-                <div className="mb-6">
-                    <h1 className="text-3xl mb-2">ホスト画面</h1>
-                    <p className="text-gray-600">ルームコード: {roomCode || '作成中...'}</p>
+                <div className="mb-6 flex items-start justify-between">
+                    <div>
+                        <h1 className="text-3xl mb-2">ホスト画面</h1>
+                        <p className="text-gray-600">
+                            ルームコード: {roomCode || "作成中..."}
+                        </p>
+                    </div>
+                    {currentQuestion && (
+                        <Badge
+                            className={`text-sm px-3 py-1.5 ${isAcceptingAnswers ? "bg-green-500 hover:bg-green-500" : "bg-gray-500 hover:bg-gray-500"} text-white`}
+                        >
+                            {isAcceptingAnswers ? "● 受付中" : "■ 停止中"}
+                        </Badge>
+                    )}
                 </div>
 
                 <div className="grid lg:grid-cols-3 gap-6">
@@ -160,14 +252,19 @@ export default function Host() {
                                 {roomCode ? (
                                     <>
                                         <div className="bg-white p-4 rounded-lg">
-                                            <QRCode value={playerUrl} size={200} />
+                                            <QRCode
+                                                value={playerUrl}
+                                                size={200}
+                                            />
                                         </div>
                                         <p className="text-xs text-gray-500 mt-4 text-center break-all">
                                             {playerUrl}
                                         </p>
                                     </>
                                 ) : (
-                                    <p className="text-sm text-gray-500 py-8">ルーム作成中...</p>
+                                    <p className="text-sm text-gray-500 py-8">
+                                        ルーム作成中...
+                                    </p>
                                 )}
                             </CardContent>
                         </Card>
@@ -192,7 +289,9 @@ export default function Host() {
                                                 className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                                             >
                                                 <div>
-                                                    <p className="font-medium">{player.name}</p>
+                                                    <p className="font-medium">
+                                                        {player.name}
+                                                    </p>
                                                     {currentQuestion &&
                                                         player.answer !==
                                                             undefined && (
@@ -208,34 +307,56 @@ export default function Host() {
                                                                         ? "正解"
                                                                         : "不正解"}
                                                                 </Badge>
-                                                                {player.isCorrect !== undefined && (
+                                                                {player.isCorrect !==
+                                                                    undefined && (
                                                                     <Badge variant="outline">
-                                                                        回答: {
-                                                                            typeof player.answer === 'boolean'
-                                                                                ? (player.answer ? 'マル' : 'バツ')
-                                                                                : (player.answer === 'true' ? 'マル' : player.answer === 'false' ? 'バツ' : player.answer)
-                                                                        }
+                                                                        回答:{" "}
+                                                                        {typeof player.answer ===
+                                                                        "boolean"
+                                                                            ? player.answer
+                                                                                ? "マル"
+                                                                                : "バツ"
+                                                                            : player.answer ===
+                                                                                "true"
+                                                                              ? "マル"
+                                                                              : player.answer ===
+                                                                                  "false"
+                                                                                ? "バツ"
+                                                                                : player.answer}
                                                                     </Badge>
                                                                 )}
                                                             </div>
                                                         )}
                                                 </div>
-                                                <div className="text-right">
+                                                <div className="text-right flex flex-col items-end gap-1">
                                                     <p className="font-semibold">
                                                         {player.score}点
                                                     </p>
-                                                    <Button
-                                                        onClick={() =>
-                                                            handleOpenEditScore(
-                                                                player,
-                                                            )
-                                                        }
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="mt-1"
-                                                    >
-                                                        <Pencil className="w-4 h-4" />
-                                                    </Button>
+                                                    <div className="flex gap-1">
+                                                        <Button
+                                                            onClick={() =>
+                                                                handleOpenEditScore(
+                                                                    player,
+                                                                )
+                                                            }
+                                                            size="sm"
+                                                            variant="outline"
+                                                        >
+                                                            <Pencil className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button
+                                                            onClick={() =>
+                                                                handleKickPlayer(
+                                                                    player,
+                                                                )
+                                                            }
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                        >
+                                                            <UserMinus className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
@@ -280,7 +401,8 @@ export default function Host() {
                                                         setCorrectAnswer("");
                                                     }}
                                                     disabled={
-                                                        !canSetAnswer || isAcceptingAnswers
+                                                        !canSetAnswer ||
+                                                        isAcceptingAnswers
                                                     }
                                                     className={`p-6 rounded-lg border-2 transition-all hover:scale-105 ${
                                                         selectedType ===
@@ -321,7 +443,8 @@ export default function Host() {
                                                         setCorrectAnswer("");
                                                     }}
                                                     disabled={
-                                                        !canSetAnswer || isAcceptingAnswers
+                                                        !canSetAnswer ||
+                                                        isAcceptingAnswers
                                                     }
                                                     className={`p-6 rounded-lg border-2 transition-all hover:scale-105 ${
                                                         selectedType ===
@@ -362,7 +485,8 @@ export default function Host() {
                                                         setCorrectAnswer("");
                                                     }}
                                                     disabled={
-                                                        !canSetAnswer || isAcceptingAnswers
+                                                        !canSetAnswer ||
+                                                        isAcceptingAnswers
                                                     }
                                                     className={`p-6 rounded-lg border-2 transition-all hover:scale-105 ${
                                                         selectedType ===
@@ -410,7 +534,8 @@ export default function Host() {
                                                             )
                                                         }
                                                         disabled={
-                                                            !canSetAnswer || isAcceptingAnswers
+                                                            !canSetAnswer ||
+                                                            isAcceptingAnswers
                                                         }
                                                         className={`p-8 rounded-xl border-2 transition-all hover:scale-105 ${
                                                             correctAnswer ===
@@ -437,7 +562,8 @@ export default function Host() {
                                                             )
                                                         }
                                                         disabled={
-                                                            !canSetAnswer || isAcceptingAnswers
+                                                            !canSetAnswer ||
+                                                            isAcceptingAnswers
                                                         }
                                                         className={`p-8 rounded-xl border-2 transition-all hover:scale-105 ${
                                                             correctAnswer ===
@@ -470,7 +596,8 @@ export default function Host() {
                                                                     )
                                                                 }
                                                                 disabled={
-                                                                    !canSetAnswer || isAcceptingAnswers
+                                                                    !canSetAnswer ||
+                                                                    isAcceptingAnswers
                                                                 }
                                                                 className={`p-8 rounded-xl border-2 transition-all hover:scale-105 ${
                                                                     correctAnswer ===
@@ -505,7 +632,8 @@ export default function Host() {
                                                             )
                                                         }
                                                         disabled={
-                                                            !canSetAnswer || isAcceptingAnswers
+                                                            !canSetAnswer ||
+                                                            isAcceptingAnswers
                                                         }
                                                         className="text-lg h-14 border-0 focus-visible:ring-0 px-2"
                                                     />
@@ -636,45 +764,49 @@ export default function Host() {
                                         ) : (
                                             <div className="space-y-3">
                                                 {sortedPlayers.map(
-                                                    (player, index) => (
-                                                        <div
-                                                            key={player.id}
-                                                            className={`flex items-center gap-4 p-4 rounded-lg ${
-                                                                index === 0
-                                                                    ? "bg-linear-to-r from-yellow-50 to-amber-50 border-2 border-yellow-300"
-                                                                    : index ===
-                                                                        1
-                                                                      ? "bg-linear-to-r from-gray-50 to-slate-50 border border-gray-300"
-                                                                      : index ===
-                                                                          2
-                                                                        ? "bg-linear-to-r from-orange-50 to-amber-50 border border-orange-300"
-                                                                        : "bg-gray-50"
-                                                            }`}
-                                                        >
-                                                            <div className="shrink-0 w-10 h-10 rounded-full bg-white flex items-center justify-center border-2">
-                                                                <span className="font-bold text-lg">
-                                                                    {index + 1}
-                                                                </span>
+                                                    (player, index) => {
+                                                        const rank =
+                                                            getRank(index);
+                                                        return (
+                                                            <div
+                                                                key={player.id}
+                                                                className={`flex items-center gap-4 p-4 rounded-lg ${
+                                                                    rank === 1
+                                                                        ? "bg-linear-to-r from-yellow-50 to-amber-50 border-2 border-yellow-300"
+                                                                        : rank ===
+                                                                            2
+                                                                          ? "bg-linear-to-r from-gray-50 to-slate-50 border border-gray-300"
+                                                                          : rank ===
+                                                                              3
+                                                                            ? "bg-linear-to-r from-orange-50 to-amber-50 border border-orange-300"
+                                                                            : "bg-gray-50"
+                                                                }`}
+                                                            >
+                                                                <div className="shrink-0 w-10 h-10 rounded-full bg-white flex items-center justify-center border-2">
+                                                                    <span className="font-bold text-lg">
+                                                                        {rank}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <p className="font-semibold">
+                                                                        {
+                                                                            player.name
+                                                                        }
+                                                                    </p>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <p className="text-2xl font-bold text-indigo-600">
+                                                                        {
+                                                                            player.score
+                                                                        }
+                                                                    </p>
+                                                                    <p className="text-xs text-gray-500">
+                                                                        ポイント
+                                                                    </p>
+                                                                </div>
                                                             </div>
-                                                            <div className="flex-1">
-                                                                <p className="font-semibold">
-                                                                    {
-                                                                        player.name
-                                                                    }
-                                                                </p>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <p className="text-2xl font-bold text-indigo-600">
-                                                                    {
-                                                                        player.score
-                                                                    }
-                                                                </p>
-                                                                <p className="text-xs text-gray-500">
-                                                                    ポイント
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                    ),
+                                                        );
+                                                    },
                                                 )}
                                             </div>
                                         )}
@@ -685,6 +817,31 @@ export default function Host() {
                     </div>
                 </div>
             </div>
+
+            {/* キック確認ダイアログ */}
+            <AlertDialog
+                open={kickTarget !== null}
+                onOpenChange={(open) => !open && setKickTarget(null)}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>プレイヤーをキック</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            「{kickTarget?.name}
+                            」をルームから退出させますか？この操作は取り消せません。
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleConfirmKick}
+                            className="bg-red-600 hover:bg-red-700"
+                        >
+                            キック
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {/* スコア編集ダイアログ */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

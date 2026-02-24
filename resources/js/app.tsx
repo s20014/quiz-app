@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { createInertiaApp } from "@inertiajs/react";
 import { resolvePageComponent } from "laravel-vite-plugin/inertia-helpers";
 import { QuizProvider } from "@/Contexts/QuizContext";
+import { Toaster } from "@/Components/ui/sonner";
 
 const appName = import.meta.env.VITE_APP_NAME || "Laravel";
 
@@ -20,6 +21,7 @@ createInertiaApp({
         root.render(
             <QuizProvider>
                 <App {...props} />
+                <Toaster richColors position="top-center" />
             </QuizProvider>,
         );
     },

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Events\QuestionAskedEvent;
+use App\Events\QuestionResetEvent;
 use App\Http\Controllers\Controller;
 use App\Models\QuizRoom;
 use Illuminate\Http\Request;
@@ -24,6 +25,7 @@ class QuestionController extends Controller
         $room->current_question = [
             'type' => $request->type,
             'correctAnswer' => $request->correctAnswer,
+            'accepting_answers' => true,
         ];
         $room->status = 'in_progress';
         $room->save();
@@ -58,11 +60,19 @@ class QuestionController extends Controller
             $playerAnswer = $player->current_answer;
             $isCorrect = false;
 
-            // Compare answers (handle boolean conversion)
-            if ($room->current_question['type'] === 'true-false') {
-                $isCorrect = ($playerAnswer === 'true') === ($correctAnswer === true || $correctAnswer === 'true');
-            } else {
-                $isCorrect = $playerAnswer === $correctAnswer;
+            if ($playerAnswer !== null) {
+                if ($room->current_question['type'] === 'true-false') {
+                    // boolean/string 混在を文字列に正規化して比較
+                    $normalizedPlayer = is_bool($playerAnswer)
+                        ? ($playerAnswer ? 'true' : 'false')
+                        : (string) $playerAnswer;
+                    $normalizedCorrect = is_bool($correctAnswer)
+                        ? ($correctAnswer ? 'true' : 'false')
+                        : (string) $correctAnswer;
+                    $isCorrect = $normalizedPlayer === $normalizedCorrect;
+                } else {
+                    $isCorrect = (string) $playerAnswer === (string) $correctAnswer;
+                }
             }
 
             // Update score if correct
@@ -80,6 +90,13 @@ class QuestionController extends Controller
             ];
         }
 
+        // 採点完了: accepting_answers を false に更新
+        $room->current_question = array_merge(
+            $room->current_question ?? [],
+            ['accepting_answers' => false]
+        );
+        $room->save();
+
         // Broadcast results to all players
         event(new \App\Events\QuestionGradedEvent($room, $results));
 
@@ -87,5 +104,28 @@ class QuestionController extends Controller
             'success' => true,
             'results' => $results,
         ]);
+    }
+
+    /**
+     * Reset the current question
+     */
+    public function reset($roomId)
+    {
+        $room = QuizRoom::with('players')->findOrFail($roomId);
+
+        // current_question をクリア
+        $room->current_question = null;
+        $room->save();
+
+        // 全プレイヤーの回答をリセット
+        foreach ($room->players as $player) {
+            $player->current_answer = null;
+            $player->save();
+        }
+
+        // Broadcast reset to all players
+        event(new QuestionResetEvent($room));
+
+        return response()->json(['success' => true]);
     }
 }
