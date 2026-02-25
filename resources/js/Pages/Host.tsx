@@ -46,6 +46,7 @@ import {
     Type,
     Pencil,
     UserMinus,
+    RefreshCcw,
 } from "lucide-react";
 import type { QuestionType } from "@/Contexts/QuizContext";
 
@@ -56,12 +57,14 @@ export default function Host() {
         currentQuestion,
         isAcceptingAnswers,
         createRoom,
+        resetRoom,
         joinRoom,
         setCurrentQuestion,
         startAcceptingAnswers,
         gradeQuestion,
         resetQuestion,
         updatePlayerScore,
+        overridePlayerResult,
         kickPlayer,
     } = useQuiz();
 
@@ -101,6 +104,7 @@ export default function Host() {
         id: string | number;
         name: string;
     } | null>(null);
+    const [showResetRoomDialog, setShowResetRoomDialog] = useState(false);
 
     // リロード復元時: currentQuestion の変化に合わせてローカルUI状態を同期
     useEffect(() => {
@@ -149,6 +153,31 @@ export default function Host() {
         await resetQuestion();
         setCorrectAnswer("");
         setCanSetAnswer(true); // リセット後は正解設定を有効にする
+    };
+
+    const handleResetRoom = async () => {
+        try {
+            localStorage.removeItem("hostRoomCode");
+            await resetRoom();
+            setCorrectAnswer("");
+            setCanSetAnswer(true);
+            setShowResetRoomDialog(false);
+            toast.success("新しいルームを作成しました");
+        } catch {
+            toast.error("ルームの作り直しに失敗しました");
+        }
+    };
+
+    const handleOverridePlayerResult = async (
+        playerId: string | number,
+        makeCorrect: boolean,
+    ) => {
+        try {
+            await overridePlayerResult(playerId.toString(), makeCorrect);
+            toast.success(makeCorrect ? "正解に変更しました" : "不正解に変更しました");
+        } catch {
+            toast.error("変更に失敗しました");
+        }
     };
 
     const handleOpenEditScore = (player: {
@@ -229,13 +258,24 @@ export default function Host() {
                             ルームコード: {roomCode || "作成中..."}
                         </p>
                     </div>
-                    {currentQuestion && (
-                        <Badge
-                            className={`text-sm px-3 py-1.5 ${isAcceptingAnswers ? "bg-green-500 hover:bg-green-500" : "bg-gray-500 hover:bg-gray-500"} text-white`}
+                    <div className="flex items-center gap-3">
+                        {currentQuestion && (
+                            <Badge
+                                className={`text-sm px-3 py-1.5 ${isAcceptingAnswers ? "bg-green-500 hover:bg-green-500" : "bg-gray-500 hover:bg-gray-500"} text-white`}
+                            >
+                                {isAcceptingAnswers ? "● 受付中" : "■ 停止中"}
+                            </Badge>
+                        )}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowResetRoomDialog(true)}
+                            className="text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700"
                         >
-                            {isAcceptingAnswers ? "● 受付中" : "■ 停止中"}
-                        </Badge>
-                    )}
+                            <RefreshCcw className="w-4 h-4 mr-1" />
+                            ルーム作り直す
+                        </Button>
+                    </div>
                 </div>
 
                 <div className="grid lg:grid-cols-3 gap-6">
@@ -298,22 +338,30 @@ export default function Host() {
                                                             <div className="flex gap-2 mt-1 flex-wrap">
                                                                 {player.isCorrect !==
                                                                 undefined ? (
-                                                                    <Badge
-                                                                        variant={
-                                                                            player.isCorrect
-                                                                                ? "default"
-                                                                                : "secondary"
+                                                                    <button
+                                                                        type="button"
+                                                                        title={player.isCorrect ? "クリックで不正解にする" : "クリックで正解にする"}
+                                                                        onClick={() =>
+                                                                            !isAcceptingAnswers &&
+                                                                            handleOverridePlayerResult(
+                                                                                player.id,
+                                                                                !player.isCorrect,
+                                                                            )
                                                                         }
-                                                                        className={
+                                                                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-all ${
+                                                                            isAcceptingAnswers
+                                                                                ? "cursor-default"
+                                                                                : "cursor-pointer hover:opacity-75 hover:scale-105"
+                                                                        } ${
                                                                             player.isCorrect
-                                                                                ? "bg-green-500 hover:bg-green-500"
-                                                                                : ""
-                                                                        }
+                                                                                ? "bg-green-500 text-white"
+                                                                                : "bg-gray-200 text-gray-700"
+                                                                        }`}
                                                                     >
                                                                         {player.isCorrect
                                                                             ? "正解"
                                                                             : "不正解"}
-                                                                    </Badge>
+                                                                    </button>
                                                                 ) : (
                                                                     <Badge variant="outline">
                                                                         回答済み
@@ -829,6 +877,30 @@ export default function Host() {
                     </div>
                 </div>
             </div>
+
+            {/* ルーム作り直し確認ダイアログ */}
+            <AlertDialog
+                open={showResetRoomDialog}
+                onOpenChange={setShowResetRoomDialog}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>ルームを作り直しますか？</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            現在のルームと全参加者データが削除され、新しいルームが作成されます。この操作は取り消せません。
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleResetRoom}
+                            className="bg-red-600 hover:bg-red-700"
+                        >
+                            作り直す
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {/* キック確認ダイアログ */}
             <AlertDialog

@@ -30,6 +30,7 @@ interface QuizContextType {
     currentQuestion: Question | null;
     isAcceptingAnswers: boolean;
     createRoom: () => Promise<void>;
+    resetRoom: () => Promise<void>;
     joinRoom: (roomCodeParam: string) => Promise<void>;
     addPlayer: (name: string, roomCodeParam?: string) => Promise<string>;
     setCurrentQuestion: (question: Question) => Promise<void>;
@@ -40,6 +41,7 @@ interface QuizContextType {
     calculateScores: () => void;
     resetQuestion: () => Promise<void>;
     updatePlayerScore: (playerId: string, newScore: number) => Promise<void>;
+    overridePlayerResult: (playerId: string, makeCorrect: boolean) => Promise<void>;
     kickPlayer: (playerId: string) => Promise<void>;
 }
 
@@ -356,6 +358,49 @@ export function QuizProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    const resetRoom = async () => {
+        setPlayers([]);
+        setCurrentQuestionInternal(null);
+        setIsAcceptingAnswers(false);
+        setRoomId(null);
+        setRoomCode(null);
+        try {
+            const { room } = await roomApi.createRoom();
+            setRoomId(room.id.toString());
+            setRoomCode(room.room_code);
+        } catch (error) {
+            console.error("Failed to reset room:", error);
+            throw error;
+        }
+    };
+
+    const overridePlayerResult = async (playerId: string, makeCorrect: boolean) => {
+        const player = players.find((p) => p.id.toString() === playerId);
+        if (!player || player.isCorrect === makeCorrect) return;
+
+        const scoreDelta = makeCorrect ? 100 : -100;
+        const newScore = Math.max(0, player.score + scoreDelta);
+
+        setPlayers((prev) =>
+            prev.map((p) =>
+                p.id.toString() === playerId ? { ...p, isCorrect: makeCorrect } : p,
+            ),
+        );
+
+        try {
+            await playerApi.updateScore(playerId, newScore);
+        } catch (error) {
+            setPlayers((prev) =>
+                prev.map((p) =>
+                    p.id.toString() === playerId
+                        ? { ...p, isCorrect: player.isCorrect, score: player.score }
+                        : p,
+                ),
+            );
+            throw error;
+        }
+    };
+
     const kickPlayer = async (playerId: string) => {
         try {
             await playerApi.kickPlayer(playerId);
@@ -375,6 +420,7 @@ export function QuizProvider({ children }: { children: ReactNode }) {
                 currentQuestion: currentQuestion,
                 isAcceptingAnswers,
                 createRoom,
+                resetRoom,
                 joinRoom,
                 addPlayer,
                 setCurrentQuestion,
@@ -385,6 +431,7 @@ export function QuizProvider({ children }: { children: ReactNode }) {
                 calculateScores,
                 resetQuestion,
                 updatePlayerScore,
+                overridePlayerResult,
                 kickPlayer,
             }}
         >
